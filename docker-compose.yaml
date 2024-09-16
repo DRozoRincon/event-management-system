@@ -1,0 +1,29 @@
+services:
+  server:
+    environment:
+      - NODE_ENV=local
+    hostname: event_management
+    restart: unless-stopped
+    build: .
+    ports:
+      - "8000-8004:8000" 
+    command: >
+      sh -c "npm run start"
+    volumes:
+      - ./src/src:/app/src
+    deploy:
+      replicas: 5 
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
