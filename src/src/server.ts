@@ -8,6 +8,7 @@ import { ConfigServer } from "./config/config-server.config";
 import swaggerSpec from "./swagger";
 
 import { AuthorizationRouter } from "./routes/authorization/authorization.router";
+import { EventManagementRouter } from "./routes/event-management/event-management.router";
 
 class Server extends ConfigServer{
   public app: express.Application = express();
@@ -26,7 +27,8 @@ class Server extends ConfigServer{
 
   routers(): Array<express.Router> {
     return [
-      new AuthorizationRouter().router
+      new AuthorizationRouter().router,
+      new EventManagementRouter().router
     ]
   }
 
