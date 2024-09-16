@@ -10,6 +10,7 @@ import { Xlsx } from "../../utils/xlsx.util";
 import { INotAttendancesRegistered } from "../../interfaces/event-management/event-management.interface";
 import { ColumnNames } from "../../enums/event-management.enum";
 import { TypeDocumentService } from "../../models/parameter/type-document.service";
+import { MapBox } from "../../utils/map-box.util";
 
 export class EventManagementController {
   constructor(
@@ -19,6 +20,7 @@ export class EventManagementController {
     private readonly attendanceService: AttendanceService = new AttendanceService(),
     private readonly typeDocumentService: TypeDocumentService = new TypeDocumentService(),
     private readonly xlsx: Xlsx = new Xlsx(),
+    private readonly mapBox: MapBox = new MapBox()
   ) {}
 
   async createEvent(req: Request, res: Response) {
@@ -387,6 +389,22 @@ export class EventManagementController {
       console.error(error);
 
       await fs.unlink(req.file?.path ?? "");
+
+      return this.httpResponse.Error(res);
+    }
+  }
+
+  async getNearbyPlaces(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const {lat, long} = await this.eventService.getEvent(id);
+
+      const nearbyPlaces = (!lat || !long) ? []:await this.mapBox.getNearbyPlaces(lat, long);
+      
+      return this.httpResponse.Ok(res, nearbyPlaces);
+    } catch (error) {
+      console.error(error);
 
       return this.httpResponse.Error(res);
     }

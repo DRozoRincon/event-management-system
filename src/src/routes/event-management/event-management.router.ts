@@ -458,5 +458,39 @@ export class EventManagementRouter extends BaseRouter<EventManagementController,
             this.genericMiddleware.singleFile('file'),
             (req, res) => this.controller.automaticAttendanceRegistration(req, res)
         );
+
+        /**
+         * @swagger
+         * /api/event-management/get-nearby-places/{id}:
+         *  get:
+         *      summary: Get Nearby Places
+         *      security:
+         *          - apiAuth: []
+         *      tags: 
+         *          - Event Management
+         *      parameters:
+         *        - name: id
+         *          in: path
+         *          required: true
+         *          schema:
+         *            type: number
+         *      responses:
+         *          200:
+         *              description: Successful process
+         *          401:
+         *              description: Unauthorized
+         *          500:
+         *              description: Internal server error
+         */
+        this.router.get(
+            '/event-management/get-nearby-places/:id', 
+            (req, res, next) => {
+                this.securityMiddleware?.validateToken(req, res, next)
+            },
+            async (req, res, next) => [
+                await this.validatorMiddleware?.validateRequest(req, res, next, IdentifierDto)
+            ],
+            (req, res) => this.controller.getNearbyPlaces(req, res)
+        );
     }
 }
