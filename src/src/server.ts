@@ -7,6 +7,8 @@ import { ConfigServer } from "./config/config-server.config";
 
 import swaggerSpec from "./swagger";
 
+import { AuthorizationRouter } from "./routes/authorization/authorization.router";
+
 class Server extends ConfigServer{
   public app: express.Application = express();
   private port: number = this.getNumberEnv("PORT");
@@ -22,7 +24,9 @@ class Server extends ConfigServer{
   }
 
   routers(): Array<express.Router> {
-    return []
+    return [
+      new AuthorizationRouter().router
+    ]
   }
 
   async checkConnectionDatabase(){
