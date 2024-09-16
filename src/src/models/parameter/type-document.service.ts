@@ -10,5 +10,12 @@ export class TypeDocumentService extends BaseQuery{
         }
     }
     
+    async getTypesDocument (): Promise <{id: number, name: string} | undefined> {
+        try {
+            return (await this.query("SELECT id, name FROM type_documents"))?.rows;
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
