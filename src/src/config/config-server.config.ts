@@ -1,10 +1,11 @@
 import * as dotenv from "dotenv";
+
 import { ConnectionDatabase } from "./connection-database.config";
 
 export abstract class ConfigServer extends ConnectionDatabase {
   constructor() {
     super();
-    
+
     const nodeNameEnv = this.createPathEnv(this.nodeEnv);
     dotenv.config({
       path: nodeNameEnv,

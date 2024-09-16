@@ -1,16 +1,19 @@
 import { Request, Response } from "express";
-import { HttpResponse } from "../../config/http.response";
+import { promises as fs } from "fs";
+
 import { EventService } from "../../models/event-management/event.service";
 import { AttendantService } from "../../models/event-management/attendant.service";
 import { AttendanceService } from "../../models/event-management/attendance.service";
-import { GeneralProperties } from "../../enums/shared.enums";
+import { TypeDocumentService } from "../../models/parameter/type-document.service";
 
-import { promises as fs } from 'fs';
+import { HttpResponse } from "../../config/http.response";
+
 import { Xlsx } from "../../utils/xlsx.util";
+import { MapBox } from "../../utils/map-box.util";
+
+import { GeneralProperties } from "../../enums/shared.enums";
 import { INotAttendancesRegistered } from "../../interfaces/event-management/event-management.interface";
 import { ColumnNames } from "../../enums/event-management.enum";
-import { TypeDocumentService } from "../../models/parameter/type-document.service";
-import { MapBox } from "../../utils/map-box.util";
 
 export class EventManagementController {
   constructor(
@@ -30,7 +33,10 @@ export class EventManagementController {
       const userId = req.user.id;
 
       if (new Date(startDate) > new Date(endDate)) {
-        return this.httpResponse.BadRequest(res, "The Start Date Should Be Lower or Equal Than End Date");
+        return this.httpResponse.BadRequest(
+          res,
+          "The Start Date Should Be Lower or Equal Than End Date"
+        );
       }
 
       const existEvent = await this.eventService.verifyIfExistEvent(
@@ -79,40 +85,50 @@ export class EventManagementController {
       const { name, document, typeDocumentId, email, date, eventId } = req.body;
 
       const existEvent = await this.eventService.getEvent(eventId);
-      
-      const dateIsCorrectToEvent = (new Date(date) >= new Date(existEvent?.startDate) && new Date(date) <= new Date(existEvent?.endDate));
-      
-      if(!existEvent || !dateIsCorrectToEvent){
-        return this.httpResponse.BadRequest(res, "Incorrect data eventId or date");
+
+      const dateIsCorrectToEvent =
+        new Date(date) >= new Date(existEvent?.startDate) &&
+        new Date(date) <= new Date(existEvent?.endDate);
+
+      if (!existEvent || !dateIsCorrectToEvent) {
+        return this.httpResponse.BadRequest(
+          res,
+          "Incorrect data eventId or date"
+        );
       }
 
       const existAttendant = await this.attendantService.verifyIfExistAttendant(
         document,
         typeDocumentId
       );
-      
-      let attendantId: number = existAttendant
-      ? existAttendant?.id
-      : (
-          await this.attendantService.createAttendant([
-            name,
-            document,
-            typeDocumentId,
-            email,
-          ])
-      )?.id;
 
-      const existAttendance = await this.attendanceService.verifyIfExistAttendance(
-        date,
-        eventId,
-        attendantId
-      );
+      let attendantId: number = existAttendant
+        ? existAttendant?.id
+        : (
+            await this.attendantService.createAttendant([
+              name,
+              document,
+              typeDocumentId,
+              email,
+            ])
+          )?.id;
+
+      const existAttendance =
+        await this.attendanceService.verifyIfExistAttendance(
+          date,
+          eventId,
+          attendantId
+        );
 
       if (existAttendance) {
         return this.httpResponse.Conflict(res, "Already Exist Attendance");
       }
 
-      await this.attendanceService.createAttendance([date, attendantId, eventId]);
+      await this.attendanceService.createAttendance([
+        date,
+        attendantId,
+        eventId,
+      ]);
 
       return this.httpResponse.Ok(res, true);
     } catch (error) {
@@ -125,6 +141,16 @@ export class EventManagementController {
   async deleteAttendance(req: Request, res: Response) {
     try {
       const { id } = req.params;
+
+      const validateBelongsAttendance =
+        await this.attendanceService.validateBelongsAttendance(id, req.user.id);
+
+      if (!validateBelongsAttendance) {
+        return this.httpResponse.Unauthorized(
+          res,
+          "This Data Does Not Belong To You"
+        );
+      }
 
       await this.attendanceService.deleteAttendance(id);
 
@@ -151,7 +177,7 @@ export class EventManagementController {
         const { date, name, document } = attendantData;
 
         if (!attendantsOrganizeByDate[date]) {
-          attendantsOrganizeByDate[date] = {date, attendants: []};
+          attendantsOrganizeByDate[date] = { date, attendants: [] };
         }
 
         attendantsOrganizeByDate[date].attendants.push({
@@ -162,7 +188,7 @@ export class EventManagementController {
 
       return this.httpResponse.Ok(res, {
         event: eventData ?? {},
-        attendantsOrganizeByDate:  Object.values(attendantsOrganizeByDate)
+        attendantsOrganizeByDate: Object.values(attendantsOrganizeByDate),
       });
     } catch (error) {
       console.error(error);
@@ -180,14 +206,21 @@ export class EventManagementController {
 
       const [totalEvents, paginationEvents] = await Promise.all([
         this.eventService.getTotalEvents(String(filter ?? ""), userId),
-        this.eventService.paginationEvents(String(filter ?? ""), userId, offset, GeneralProperties.PAGE_SIZE)
+        this.eventService.paginationEvents(
+          String(filter ?? ""),
+          userId,
+          offset,
+          GeneralProperties.PAGE_SIZE
+        ),
       ]);
 
-      const totalPages = Math.ceil(parseFloat(totalEvents?.total) / GeneralProperties.PAGE_SIZE);
-      
+      const totalPages = Math.ceil(
+        parseFloat(totalEvents?.total) / GeneralProperties.PAGE_SIZE
+      );
+
       return this.httpResponse.Ok(res, {
         data: paginationEvents,
-        totalPages
+        totalPages,
       });
     } catch (error) {
       console.error(error);
@@ -198,9 +231,9 @@ export class EventManagementController {
 
   async updateEvent(req: Request, res: Response) {
     try {
-      let {id, startDate, endDate, name} = req.body;
+      let { id, startDate, endDate, name } = req.body;
       const userId = req.user.id;
-      
+
       const existEvent = await this.eventService.verifyIfExistEvent(
         name,
         userId,
@@ -215,14 +248,21 @@ export class EventManagementController {
 
       startDate = startDate ?? eventBefore?.startDate;
       endDate = endDate ?? eventBefore?.endDate;
-      
+
       if (new Date(startDate) > new Date(endDate)) {
-        return this.httpResponse.BadRequest(res, "The Start Date Should Be Lower or Equal Than End Date");
+        return this.httpResponse.BadRequest(
+          res,
+          "The Start Date Should Be Lower or Equal Than End Date"
+        );
       }
 
       await Promise.all([
-        this.attendanceService.deleteAttendanceByEventDateChange(id, startDate, endDate),
-        this.eventService.updateEvent(req.body)
+        this.attendanceService.deleteAttendanceByEventDateChange(
+          id,
+          startDate,
+          endDate
+        ),
+        this.eventService.updateEvent(req.body),
       ]);
 
       return this.httpResponse.Ok(res, true);
@@ -233,11 +273,16 @@ export class EventManagementController {
     }
   }
 
-  async eventReport(req: Request, res: Response) {
+  async eventAttendanceReport(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
 
-      const attendantsData = await this.attendanceService.attendantByEventReport(String(startDate), String(endDate), req.user.id);
+      const attendantsData =
+        await this.attendanceService.attendanceByEventReport(
+          String(startDate),
+          String(endDate),
+          req.user.id
+        );
 
       let groupingEventReport: any = {};
 
@@ -245,31 +290,38 @@ export class EventManagementController {
         const { date, name, document, eventName } = attendantData;
 
         if (!groupingEventReport[date]) {
-          groupingEventReport[date] = {date, events: {}};
+          groupingEventReport[date] = { date, events: {} };
         }
 
-        if(!groupingEventReport[date].events[eventName]) {
-          groupingEventReport[date].events[eventName] = {eventName, detailAttendance: { totalAttendance: 0, listAttendants: []}};
+        if (!groupingEventReport[date].events[eventName]) {
+          groupingEventReport[date].events[eventName] = {
+            eventName,
+            detailAttendance: { totalAttendance: 0, listAttendants: [] },
+          };
         }
 
-        groupingEventReport[date].events[eventName].detailAttendance.totalAttendance += 1;
-        groupingEventReport[date].events[eventName].detailAttendance.listAttendants.push({
+        groupingEventReport[date].events[
+          eventName
+        ].detailAttendance.totalAttendance += 1;
+        groupingEventReport[date].events[
+          eventName
+        ].detailAttendance.listAttendants.push({
           name,
           document,
         });
       }
 
       let eventReport = [];
-      
-      const convertInArrayEventReport: ({date: string, events: Object})[] = Object.values(groupingEventReport);
 
-      for(const eventReportByDate of convertInArrayEventReport) {
+      const convertInArrayEventReport: { date: string; events: Object }[] =
+        Object.values(groupingEventReport);
+
+      for (const eventReportByDate of convertInArrayEventReport) {
         eventReportByDate.events = Object.values(eventReportByDate.events);
         eventReport.push(eventReportByDate);
       }
 
-      return this.httpResponse.Ok(res, eventReport)
-
+      return this.httpResponse.Ok(res, eventReport);
     } catch (error) {
       console.error(error);
 
@@ -300,10 +352,10 @@ export class EventManagementController {
       let notRegistered: INotAttendancesRegistered = {
         incompleteInformation: [],
         notFoundInDatabase: [],
-        thereWasRecordAttendance: []
+        thereWasRecordAttendance: [],
       };
 
-      for(const attendance of attendances){
+      for (const attendance of attendances) {
         const eventName = attendance[ColumnNames.EVENT_NAME];
         let date = attendance[ColumnNames.DATE_ATTENDANT];
         const name = attendance[ColumnNames.NAME_ASSISTANT];
@@ -311,15 +363,26 @@ export class EventManagementController {
         const typeDocument = attendance[ColumnNames.TYPE_DOCUMENT];
         const document = attendance[ColumnNames.DOCUMENT];
 
-        if(
-          !eventName || 
-          !date || !(typeof date === 'number') || 
-          !name || !(eventName.length <= 100) || 
-          !email || !(eventName.length <= 100) || 
-          !typeDocument || 
-          !document || !(new String(document).length <= 20)
-        ){
-          notRegistered.incompleteInformation.push({eventName, date, name, email, typeDocument, document});
+        if (
+          !eventName ||
+          !date ||
+          !(typeof date === "number") ||
+          !name ||
+          !(eventName.length <= 100) ||
+          !email ||
+          !(eventName.length <= 100) ||
+          !typeDocument ||
+          !document ||
+          !(new String(document).length <= 20)
+        ) {
+          notRegistered.incompleteInformation.push({
+            eventName,
+            date,
+            name,
+            email,
+            typeDocument,
+            document,
+          });
 
           continue;
         }
@@ -329,53 +392,77 @@ export class EventManagementController {
         const millisecondsSinceEpoch = daysSinceEpoch * 24 * 60 * 60 * 1000;
 
         date = new Date(excelEpoch.getTime() + millisecondsSinceEpoch);
-        date = date.toISOString().split('T')[0];
+        date = date.toISOString().split("T")[0];
 
         const [existEvent, existTypeDocument] = await Promise.all([
           this.eventService.verifyIfExistEvent(eventName, userId),
-          this.typeDocumentService.getTypeDocument(typeDocument)
+          this.typeDocumentService.getTypeDocument(typeDocument),
         ]);
 
-        
         const eventData = await this.eventService.getEvent(existEvent?.id);
-        
-        const dateIsCorrectToEvent = (new Date(date) >= new Date(eventData?.startDate) && new Date(date) <= new Date(eventData?.endDate));
 
-        if(!existEvent || !existTypeDocument || !dateIsCorrectToEvent) {
-          notRegistered.notFoundInDatabase.push({eventName, date, name, email, typeDocument, document});
+        const dateIsCorrectToEvent =
+          new Date(date) >= new Date(eventData?.startDate) &&
+          new Date(date) <= new Date(eventData?.endDate);
+
+        if (!existEvent || !existTypeDocument || !dateIsCorrectToEvent) {
+          notRegistered.notFoundInDatabase.push({
+            eventName,
+            date,
+            name,
+            email,
+            typeDocument,
+            document,
+          });
           continue;
         }
-        
-        const existAttendant = await this.attendantService.verifyIfExistAttendant(
-          document,
-          existTypeDocument.id
-        );
-  
-        let attendantId: number = existAttendant
-        ? existAttendant?.id
-        : (
-          await this.attendantService.createAttendant([
-            name,
+
+        const existAttendant =
+          await this.attendantService.verifyIfExistAttendant(
             document,
-            existTypeDocument.id,
-            email,
-          ])
-        )?.id;
-  
-        const existAttendance = await this.attendanceService.verifyIfExistAttendance(
-          date,
-          existEvent.id,
-          attendantId
-        );
-  
+            existTypeDocument.id
+          );
+
+        let attendantId: number = existAttendant
+          ? existAttendant?.id
+          : (
+              await this.attendantService.createAttendant([
+                name,
+                document,
+                existTypeDocument.id,
+                email,
+              ])
+            )?.id;
+
+        const existAttendance =
+          await this.attendanceService.verifyIfExistAttendance(
+            date,
+            existEvent.id,
+            attendantId
+          );
+
         if (existAttendance) {
-          notRegistered.thereWasRecordAttendance.push({eventName, date, name, email, typeDocument, document});
+          notRegistered.thereWasRecordAttendance.push({
+            eventName,
+            date,
+            name,
+            email,
+            typeDocument,
+            document,
+          });
         }
-  
-        await this.attendanceService.createAttendance([date, attendantId, existEvent.id]);
+
+        await this.attendanceService.createAttendance([
+          date,
+          attendantId,
+          existEvent.id,
+        ]);
       }
 
-      const totalRecordsFailed = (notRegistered.incompleteInformation.length + notRegistered.notFoundInDatabase.length + notRegistered.thereWasRecordAttendance.length);
+      const totalRecordsFailed =
+        notRegistered.incompleteInformation.length +
+        notRegistered.notFoundInDatabase.length +
+        notRegistered.thereWasRecordAttendance.length;
 
       await fs.unlink(filePath);
 
@@ -383,7 +470,7 @@ export class EventManagementController {
         totalRecords: attendances.length,
         totalRecordsSuccessful: attendances.length - totalRecordsFailed,
         totalRecordsFailed,
-        notRegistered
+        notRegistered,
       });
     } catch (error) {
       console.error(error);
@@ -398,10 +485,11 @@ export class EventManagementController {
     try {
       const { id } = req.params;
 
-      const {lat, long} = await this.eventService.getEvent(id);
+      const { lat, long } = await this.eventService.getEvent(id);
 
-      const nearbyPlaces = (!lat || !long) ? []:await this.mapBox.getNearbyPlaces(lat, long);
-      
+      const nearbyPlaces =
+        !lat || !long ? [] : await this.mapBox.getNearbyPlaces(lat, long);
+
       return this.httpResponse.Ok(res, nearbyPlaces);
     } catch (error) {
       console.error(error);
@@ -409,5 +497,4 @@ export class EventManagementController {
       return this.httpResponse.Error(res);
     }
   }
-
 }
