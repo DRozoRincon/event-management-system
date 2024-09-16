@@ -97,3 +97,13 @@ export class PaginationDto {
     @IsString()
     filter: string;
 }
+
+export class DateRangeDto {
+    @IsDateString()
+    @IsOptional()
+    startDate: string
+
+    @IsDateString()
+    @IsOptional()
+    endDate: string
+}

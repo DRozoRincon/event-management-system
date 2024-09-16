@@ -223,4 +223,48 @@ export class EventManagementController {
     }
   }
 
+  async eventReport(req: Request, res: Response) {
+    try {
+      const { startDate, endDate } = req.query;
+
+      const attendantsData = await this.attendanceService.attendantByEventReport(String(startDate), String(endDate), req.user.id);
+
+      let groupingEventReport: any = {};
+
+      for (const attendantData of attendantsData) {
+        const { date, name, document, eventName } = attendantData;
+
+        if (!groupingEventReport[date]) {
+          groupingEventReport[date] = {date, events: {}};
+        }
+
+        if(!groupingEventReport[date].events[eventName]) {
+          groupingEventReport[date].events[eventName] = {eventName, detailAttendance: { totalAttendance: 0, listAttendants: []}};
+        }
+
+        groupingEventReport[date].events[eventName].detailAttendance.totalAttendance += 1;
+        groupingEventReport[date].events[eventName].detailAttendance.listAttendants.push({
+          name,
+          document,
+        });
+      }
+
+      let eventReport = [];
+      
+      const convertInArrayEventReport: ({date: string, events: Object})[] = Object.values(groupingEventReport);
+
+      for(const eventReportByDate of convertInArrayEventReport) {
+        eventReportByDate.events = Object.values(eventReportByDate.events);
+        eventReport.push(eventReportByDate);
+      }
+
+      return this.httpResponse.Ok(res, eventReport)
+
+    } catch (error) {
+      console.error(error);
+
+      return this.httpResponse.Error(res);
+    }
+  }
+
 }

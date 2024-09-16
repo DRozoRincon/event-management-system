@@ -1,7 +1,7 @@
 import { EventManagementController } from "../../controllers/event-management/event-management.controller";
 import { TokenMiddleware } from "../../middlewares/token.middleware";
 import { ValidatorMiddleware } from "../../middlewares/validator.middleware";
-import { AttendanceDto, EventDto, EventUpdateDto, PaginationDto } from "../../validators/event-management/event-management-dto.validator";
+import { AttendanceDto, DateRangeDto, EventDto, EventUpdateDto, PaginationDto } from "../../validators/event-management/event-management-dto.validator";
 import { IdentifierDto } from "../../validators/shared/shared.dto";
 
 import { BaseRouter } from "../base.router";
@@ -354,6 +354,45 @@ export class EventManagementRouter extends BaseRouter<EventManagementController,
                 await this.validatorMiddleware?.validateRequest(req, res, next, EventUpdateDto)
             ],
             (req, res) => this.controller.updateEvent(req, res)
+        );
+
+        /**
+         * @swagger
+         * /api/event-management/event-report:
+         *  get:
+         *      summary: Event Report
+         *      security:
+         *          - apiAuth: []
+         *      tags: 
+         *          - Event Management
+         *      parameters:
+         *        - name: startDate
+         *          in: query
+         *          required: true
+         *          schema:
+         *            type: string
+         *        - name: endDate
+         *          in: query
+         *          required: true
+         *          schema:
+         *            type: string
+         *      responses:
+         *          200:
+         *              description: Successful process
+         *          401:
+         *              description: Unauthorized
+         *          500:
+         *              description: Internal server error
+         */
+        this.router.get(
+            '/event-management/event-report', 
+            (req, res, next) => {
+                this.securityMiddleware?.validateToken(req, res, next)
+            },
+            async (req, res, next) => [
+                await this.validatorMiddleware?.validateRequest(req, res, next, DateRangeDto)
+            ],
+            (req, res) => this.controller.eventReport(req, res)
         );
 
     }
