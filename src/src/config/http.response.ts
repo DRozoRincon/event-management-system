@@ -1,4 +1,5 @@
 import { Response } from "express";
+
 import { HttpStatus } from "../enums/config.enums";
 
 export class HttpResponse {
