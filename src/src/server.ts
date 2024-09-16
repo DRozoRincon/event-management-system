@@ -7,6 +7,8 @@ import { ConfigServer } from "./config/config-server.config";
 
 import swaggerSpec from "./swagger";
 
+import { AuthorizationRouter } from "./routes/authorization/authorization.router";
+
 class Server extends ConfigServer{
   public app: express.Application = express();
   private port: number = this.getNumberEnv("PORT");
@@ -15,6 +17,7 @@ class Server extends ConfigServer{
     super();
     this.app.use(cors());
     this.app.use(express.json());
+    this.app.use("/api", this.routers());
     this.app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
     this.listen();
@@ -22,7 +25,9 @@ class Server extends ConfigServer{
   }
 
   routers(): Array<express.Router> {
-    return []
+    return [
+      new AuthorizationRouter().router
+    ]
   }
 
   async checkConnectionDatabase(){
