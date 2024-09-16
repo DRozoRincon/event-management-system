@@ -17,6 +17,7 @@ class Server extends ConfigServer{
     super();
     this.app.use(cors());
     this.app.use(express.json());
+    this.app.use("/api", this.routers());
     this.app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
     this.listen();
