@@ -1,4 +1,5 @@
 import { EventManagementController } from "../../controllers/event-management/event-management.controller";
+import { MulterMiddleware } from "../../middlewares/multer.middleware";
 import { TokenMiddleware } from "../../middlewares/token.middleware";
 import { ValidatorMiddleware } from "../../middlewares/validator.middleware";
 import { AttendanceDto, DateRangeDto, EventDto, EventUpdateDto, PaginationDto } from "../../validators/event-management/event-management-dto.validator";
@@ -6,10 +7,10 @@ import { IdentifierDto } from "../../validators/shared/shared.dto";
 
 import { BaseRouter } from "../base.router";
 
-export class EventManagementRouter extends BaseRouter<EventManagementController, ValidatorMiddleware, TokenMiddleware>{
+export class EventManagementRouter extends BaseRouter<EventManagementController, ValidatorMiddleware, TokenMiddleware, MulterMiddleware>{
 
     constructor(){
-        super(EventManagementController, ValidatorMiddleware, TokenMiddleware);
+        super(EventManagementController, ValidatorMiddleware, TokenMiddleware, MulterMiddleware);
     }
 
     routes(): void{
@@ -395,5 +396,67 @@ export class EventManagementRouter extends BaseRouter<EventManagementController,
             (req, res) => this.controller.eventReport(req, res)
         );
 
+        /**
+         * @swagger
+         * /api/event-management/download-template:
+         *  get:
+         *      summary: Download Template
+         *      security:
+         *          - apiAuth: []
+         *      tags: 
+         *          - Event Management
+         *      responses:
+         *          200:
+         *              description: Successful process
+         *          401:
+         *              description: Unauthorized
+         *          500:
+         *              description: Internal server error
+         */
+        this.router.get(
+            '/event-management/download-template',
+            (req, res, next) => {
+                this.securityMiddleware?.validateToken(req, res, next)
+            },
+            (req, res) => this.controller.downloadTemplate(req, res)
+        );
+
+        /**
+         * @swagger
+         * /api/event-management/file-registration-attendance:
+         *  post:
+         *      summary: File Attendances 
+         *      security:
+         *          - apiAuth: []
+         *      tags: 
+         *          - Event Management
+         *      requestBody:
+         *          description: Required parameters
+         *          required: true
+         *          content:
+         *              multipart/form-data:
+         *                  schema:
+         *                      type: object
+         *                      properties:
+         *                          file:
+         *                             type: string
+         *                             format: binary
+         *                             description: The file to upload
+         *      responses:
+         *          200:
+         *              description: Successful process
+         *          401:
+         *              description: Unauthorized
+         *          500:
+         *              description: Internal server error
+         */
+        this.router.post(
+            '/event-management/file-registration-attendance',
+            (req, res, next) => {
+                this.securityMiddleware?.validateToken(req, res, next)
+            },
+            this.genericMiddleware.singleFile('file'),
+            (req, res) => this.controller.automaticAttendanceRegistration(req, res)
+        );
     }
 }

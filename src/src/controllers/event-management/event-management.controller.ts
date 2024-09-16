@@ -5,12 +5,20 @@ import { AttendantService } from "../../models/event-management/attendant.servic
 import { AttendanceService } from "../../models/event-management/attendance.service";
 import { GeneralProperties } from "../../enums/shared.enums";
 
+import { promises as fs } from 'fs';
+import { Xlsx } from "../../utils/xlsx.util";
+import { INotAttendancesRegistered } from "../../interfaces/event-management/event-management.interface";
+import { ColumnNames } from "../../enums/event-management.enum";
+import { TypeDocumentService } from "../../models/parameter/type-document.service";
+
 export class EventManagementController {
   constructor(
     private readonly httpResponse: HttpResponse = new HttpResponse(),
     private readonly eventService: EventService = new EventService(),
     private readonly attendantService: AttendantService = new AttendantService(),
-    private readonly attendanceService: AttendanceService = new AttendanceService()
+    private readonly attendanceService: AttendanceService = new AttendanceService(),
+    private readonly typeDocumentService: TypeDocumentService = new TypeDocumentService(),
+    private readonly xlsx: Xlsx = new Xlsx(),
   ) {}
 
   async createEvent(req: Request, res: Response) {
@@ -262,6 +270,123 @@ export class EventManagementController {
 
     } catch (error) {
       console.error(error);
+
+      return this.httpResponse.Error(res);
+    }
+  }
+
+  async downloadTemplate(req: Request, res: Response) {
+    try {
+      const file = `${__dirname}/../../static/${GeneralProperties.TEMPLATE_FILE}.xlsx`;
+
+      return res.download(file);
+    } catch (error) {
+      console.error(error);
+
+      return this.httpResponse.Error(res);
+    }
+  }
+
+  async automaticAttendanceRegistration(req: Request, res: Response) {
+    try {
+      const userId = req.user.id;
+
+      const filePath = req.file?.path ?? "";
+
+      const attendances = this.xlsx.getExcelInJsonFormat(filePath);
+
+      let notRegistered: INotAttendancesRegistered = {
+        incompleteInformation: [],
+        notFoundInDatabase: [],
+        thereWasRecordAttendance: []
+      };
+
+      for(const attendance of attendances){
+        const eventName = attendance[ColumnNames.EVENT_NAME];
+        let date = attendance[ColumnNames.DATE_ATTENDANT];
+        const name = attendance[ColumnNames.NAME_ASSISTANT];
+        const email = attendance[ColumnNames.EMAIL];
+        const typeDocument = attendance[ColumnNames.TYPE_DOCUMENT];
+        const document = attendance[ColumnNames.DOCUMENT];
+
+        if(
+          !eventName || 
+          !date || !(typeof date === 'number') || 
+          !name || !(eventName.length <= 100) || 
+          !email || !(eventName.length <= 100) || 
+          !typeDocument || 
+          !document || !(new String(document).length <= 20)
+        ){
+          notRegistered.incompleteInformation.push({eventName, date, name, email, typeDocument, document});
+
+          continue;
+        }
+
+        const excelEpoch = new Date(1970, 0, 1);
+        const daysSinceEpoch = date - 25569;
+        const millisecondsSinceEpoch = daysSinceEpoch * 24 * 60 * 60 * 1000;
+
+        date = new Date(excelEpoch.getTime() + millisecondsSinceEpoch);
+        date = date.toISOString().split('T')[0];
+
+        const [existEvent, existTypeDocument] = await Promise.all([
+          this.eventService.verifyIfExistEvent(eventName, userId),
+          this.typeDocumentService.getTypeDocument(typeDocument)
+        ]);
+
+        
+        const eventData = await this.eventService.getEvent(existEvent?.id);
+        
+        const dateIsCorrectToEvent = (new Date(date) >= new Date(eventData?.startDate) && new Date(date) <= new Date(eventData?.endDate));
+
+        if(!existEvent || !existTypeDocument || !dateIsCorrectToEvent) {
+          notRegistered.notFoundInDatabase.push({eventName, date, name, email, typeDocument, document});
+          continue;
+        }
+        
+        const existAttendant = await this.attendantService.verifyIfExistAttendant(
+          document,
+          existTypeDocument.id
+        );
+  
+        let attendantId: number = existAttendant
+        ? existAttendant?.id
+        : (
+          await this.attendantService.createAttendant([
+            name,
+            document,
+            existTypeDocument.id,
+            email,
+          ])
+        )?.id;
+  
+        const existAttendance = await this.attendanceService.verifyIfExistAttendance(
+          date,
+          existEvent.id,
+          attendantId
+        );
+  
+        if (existAttendance) {
+          notRegistered.thereWasRecordAttendance.push({eventName, date, name, email, typeDocument, document});
+        }
+  
+        await this.attendanceService.createAttendance([date, attendantId, existEvent.id]);
+      }
+
+      const totalRecordsFailed = (notRegistered.incompleteInformation.length + notRegistered.notFoundInDatabase.length + notRegistered.thereWasRecordAttendance.length);
+
+      await fs.unlink(filePath);
+
+      return this.httpResponse.Ok(res, {
+        totalRecords: attendances.length,
+        totalRecordsSuccessful: attendances.length - totalRecordsFailed,
+        totalRecordsFailed,
+        notRegistered
+      });
+    } catch (error) {
+      console.error(error);
+
+      await fs.unlink(req.file?.path ?? "");
 
       return this.httpResponse.Error(res);
     }
